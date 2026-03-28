@@ -755,7 +755,7 @@ class Exporter:
     @try_export
     def export_paddle(self, prefix=colorstr("PaddlePaddle:")):
         """Export YOLO model to PaddlePaddle format."""
-        assert not IS_PYTHON_3_13, "PaddlePaddle export not supported on Python 3.13"
+        assert not IS_PYTHON_MINIMUM_3_13, "PaddlePaddle export not supported on Python 3.13"
         from ultralytics.utils.export.paddle import torch2paddle
 
         return torch2paddle(self.model, self.im, self.file, self.metadata, prefix)
@@ -763,7 +763,7 @@ class Exporter:
     @try_export
     def export_mnn(self, prefix=colorstr("MNN:")):
         """Export YOLO model to MNN format using MNN https://github.com/alibaba/MNN."""
-        assert not IS_PYTHON_3_13, "MNN export not supported on Python 3.13"
+        assert not IS_PYTHON_MINIMUM_3_13, "MNN export not supported on Python 3.13"
         from ultralytics.utils.export.mnn import onnx2mnn
 
         f_onnx = self.export_onnx()
@@ -915,7 +915,7 @@ class Exporter:
     @try_export
     def export_saved_model(self, prefix=colorstr("TensorFlow SavedModel:")):
         """Export YOLO model to TensorFlow SavedModel format."""
-        assert not (MACOS and IS_PYTHON_3_13), "TensorFlow exports not supported on Python>=3.13 with MacOS."
+        assert not (MACOS and IS_PYTHON_MINIMUM_3_13), "TensorFlow exports not supported on Python>=3.13 with MacOS."
         cuda = torch.cuda.is_available()
         try:
             import tensorflow as tf
@@ -1108,7 +1108,7 @@ class Exporter:
     @try_export
     def export_tfjs(self, prefix=colorstr("TensorFlow.js:")):
         """Export YOLO model to TensorFlow.js format."""
-        assert not IS_PYTHON_3_13, "TensorFlow.js export not supported on Python>=3.13."
+        assert not IS_PYTHON_MINIMUM_3_13, "TensorFlow.js export not supported on Python>=3.13."
         check_requirements("tensorflowjs")
         from ultralytics.utils.export.tensorflow import pb2tfjs
 
@@ -1136,7 +1136,7 @@ class Exporter:
             "See https://developer.aitrios.sony-semicon.com/en/docs/raspberry-pi-ai-camera/imx500-converter?version=3.17.3&progLang="
         )
         assert IS_PYTHON_MINIMUM_3_9, "IMX export is only supported on Python 3.9 or above."
-        assert not IS_PYTHON_3_13, "IMX export not supported on Python>=3.13."
+        assert not IS_PYTHON_MINIMUM_3_13, "IMX export not supported on Python>=3.13."
 
         if getattr(self.model, "end2end", False):
             raise ValueError("IMX export is not supported for end2end models.")
