@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 
 __all__ = (
+    "Add",
     "CBAM",
     "ChannelAttention",
     "Concat",
@@ -639,6 +640,16 @@ class Concat(nn.Module):
             (torch.Tensor): Concatenated tensor.
         """
         return torch.cat(x, self.d)
+
+
+class Add(nn.Module):
+    """Element-wise add a list of tensors."""
+
+    def forward(self, x: list[torch.Tensor]):
+        """Return the element-wise sum of all input tensors."""
+        if len(x) < 2:
+            raise ValueError(f"Add expects at least 2 input tensors, but got {len(x)}.")
+        return sum(x[1:], x[0])
 
 
 class Index(nn.Module):

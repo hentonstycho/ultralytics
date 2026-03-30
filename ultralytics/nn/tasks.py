@@ -13,6 +13,7 @@ import torch.nn as nn
 from ultralytics.nn.autobackend import check_class_names
 from ultralytics.nn.modules import (
     AIFI,
+    Add,
     C1,
     C2,
     C2PSA,
@@ -1750,6 +1751,12 @@ def parse_model(d, ch, verbose=True):
             args = [ch[f]]
         elif m is Concat:
             c2 = sum(ch[x] for x in f)
+        elif m is Add:
+            if not isinstance(f, list) or len(f) < 2:
+                raise ValueError(f"Add expects at least 2 input layers, but got from={f}.")
+            c2 = ch[f[0]]
+            if any(ch[x] != c2 for x in f[1:]):
+                raise ValueError(f"Add inputs must have the same channels, but got {[ch[x] for x in f]}.")
         elif m in frozenset(
             {
                 Detect,
