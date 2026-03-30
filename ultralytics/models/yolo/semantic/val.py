@@ -49,6 +49,7 @@ class SemanticValidator(BaseValidator):
         self.dataset = None
         self.results_dir = None
         self.image_shapes = {}
+        self._semantic_target_shape = None
 
     def init_metrics(self, model):
         """Initialize metrics with model class names.
@@ -79,6 +80,7 @@ class SemanticValidator(BaseValidator):
         batch["img"] = batch["img"].to(self.device, non_blocking=True)
         batch["img"] = (batch["img"].half() if self.args.half else batch["img"].float()) / 255
         batch["semantic_mask"] = batch["semantic_mask"].to(self.device, non_blocking=True).long()
+        self._semantic_target_shape = tuple(batch["semantic_mask"].shape[-2:])
         return batch
 
     def postprocess(self, preds):
@@ -92,6 +94,11 @@ class SemanticValidator(BaseValidator):
         """
         if isinstance(preds, (tuple, list)):
             preds = preds[0]
+        preds = (
+            F.interpolate(preds, size=self._semantic_target_shape, mode="bilinear", align_corners=False)
+            if self._semantic_target_shape is not None
+            else F.interpolate(preds, scale_factor=4, mode="bilinear", align_corners=False)
+        )
         return preds.argmax(dim=1)
 
     def update_metrics(self, preds, batch):
@@ -102,7 +109,6 @@ class SemanticValidator(BaseValidator):
             batch (dict): Batch containing 'semantic_mask'.
         """
         targets = batch["semantic_mask"]
-        # Resize preds to match target if needed (preds may be at stride-4 during training)
         if preds.shape[1:] != targets.shape[1:]:
             preds = F.interpolate(preds.float().unsqueeze(1), targets.shape[1:], mode="nearest").squeeze(1).long()
         if self.args.save_mask:
