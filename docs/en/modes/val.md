@@ -137,6 +137,32 @@ The below examples showcase YOLO model validation with custom arguments in Pytho
     print(results.confusion_matrix.to_df())
     ```
 
+!!! tip "Per-Image Precision and Recall"
+
+    Detection validation also stores per-image counts and derived metrics, so you can inspect precision and recall for
+    each image directly after validation.
+
+    ```python
+    from ultralytics import YOLO
+
+    # Load a model
+    model = YOLO("yolo11n.pt")
+
+    # Validate and access per-image metrics
+    results = model.val(data="coco.yaml")
+    results.image_metrics[0]  # {'image': '...', 'tp': ..., 'fp': ..., 'fn': ..., 'precision': ..., 'recall': ...}
+    ```
+     Each entry in `image_metrics` is a dictionary containing the following keys:
+
+    | Key           | Description                                                    |
+    |---------------|----------------------------------------------------------------|
+    | `image`       | File path of the image.                                        |
+    | `tp`          | Number of true positive detections.                            |
+    | `fp`          | Number of false positive detections.                           |
+    | `fn`          | Number of false negative detections (missed ground truths).    |
+    | `precision`   | Precision score for the image (`tp / (tp + fp)`).              |
+    | `recall`      | Recall score for the image (`tp / (tp + fn)`).                 |
+    
 | Method      | Return Type            | Description                                                                |
 | ----------- | ---------------------- | -------------------------------------------------------------------------- |
 | `summary()` | `List[Dict[str, Any]]` | Converts validation results to a summarized dictionary.                    |
@@ -187,6 +213,7 @@ print(metrics.box.map)  # mAP50-95
 print(metrics.box.map50)  # mAP50
 print(metrics.box.map75)  # mAP75
 print(metrics.box.maps)  # list of mAP50-95 for each category
+print(metrics.image_metrics[0])  # per-image TP, FP, FN, precision, and recall
 ```
 
 For a complete performance evaluation, it's crucial to review all these metrics. For more details, refer to the [Key Features of Val Mode](#key-features-of-val-mode).
