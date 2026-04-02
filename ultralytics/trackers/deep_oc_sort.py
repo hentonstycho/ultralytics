@@ -333,6 +333,28 @@ class DeepOCSORT(OCSORT):
             track.mark_removed()
             removed_stracks.append(track)
 
+        # Stage 3.5: Appearance-only recovery for lost tracks
+        # Try to re-associate remaining unmatched detections with lost tracks using ReID features
+        if self.with_reid and self.encoder is not None:
+            remaining_dets = [detections[i] for i in u_detection]
+            recent_lost = [t for t in self.lost_stracks
+                          if self.frame_id - t.end_frame <= self.max_time_lost
+                          and hasattr(t, 'smooth_feat') and t.smooth_feat is not None]
+            if remaining_dets and recent_lost:
+                emb_dists = matching.embedding_distance(recent_lost, remaining_dets) / 2.0
+                emb_dists[emb_dists > (1 - self.appearance_thresh)] = 1.0
+                reid_matches, _, reid_u_det = matching.linear_assignment(emb_dists, thresh=0.4)
+                matched_det_indices = set()
+                for itracked, idet in reid_matches:
+                    track = recent_lost[itracked]
+                    det = remaining_dets[idet]
+                    track.apply_oru(det.xyxy, self.frame_id)
+                    track.re_activate(det, self.frame_id, new_id=False)
+                    refind_stracks.append(track)
+                    matched_det_indices.add(id(remaining_dets[idet]))
+                # Update u_detection to exclude matched detections
+                u_detection = [i for i in u_detection if id(detections[i]) not in matched_det_indices]
+
         # Stage 4: Init new tracks
         for inew in u_detection:
             track = detections[inew]
