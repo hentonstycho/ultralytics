@@ -1,0 +1,470 @@
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
+
+"""Frozen teacher models for universal encoder distillation.
+
+Teacher abstraction inspired by:
+- EUPE/UNIC/DUNE: forward_features() -> {"x_norm_clstoken", "x_norm_patchtokens"} dict convention
+- RADIO (NVlabs/RADIO, adaptor_base.py): typed AdaptorInput/RadioOutput NamedTuples for error catching
+- DUNE (naver/dune, teachers/config.py): per-teacher token_types -- SAM/MASt3R/ConvNeXt produce patches only
+- MobileCLIP (ultralytics/nn/image_model.py): TorchScript .ts pattern for zero-dependency inference
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import torch
+import torch.nn as nn
+
+
+def safe_key(variant: str) -> str:
+    """Convert teacher variant name to safe key (nn.ModuleDict keys can't contain ':')."""
+    return variant.replace(":", "_")
+
+
+@dataclass
+class TeacherOutput:
+    """Typed output from any teacher model, used by ImageEncoderLoss.
+
+    Typed dataclass instead of raw dict, following RADIO's AdaptorInput/RadioOutput pattern
+    (RADIO/radio/adaptor_base.py) to catch mismatches at construction, not key lookup.
+
+    Attributes:
+        cls (torch.Tensor | None): CLS/summary features (B, D). None for patches-only teachers (SAM3, ConvNeXt) where
+            CLS is not meaningful -- following DUNE convention where
+        MASt3R and MultiHMR use token_types=["patch"] (dune/teachers/config.py: 25,36).
+        patches (torch.Tensor): Spatial/patch features (B, N, D). Always present.
+    """
+
+    cls: torch.Tensor | None
+    patches: torch.Tensor
+
+
+class TeacherModel(nn.Module):
+    """Abstract base for frozen teacher models in encoder distillation.
+
+    All subclasses produce TeacherOutput with CLS and/or patch tokens. The token_types attribute indicates which outputs
+    are meaningful for loss computation -- following DUNE's per-teacher token_types config (verified:
+    dune/teachers/config.py:16,25,36).
+
+    Separate from ImageModel (image_model.py) because output contract differs: ImageModel returns a single vector;
+    TeacherModel returns CLS + patch features for spatial distillation.
+
+    Attributes:
+        embed_dim (int): Teacher embedding dimension.
+        num_patches (int): Number of patch tokens at default resolution.
+        token_types (tuple[str, ...]): Which outputs are meaningful: ("cls", "patches") or ("patches",).
+    """
+
+    embed_dim: int = 0
+    num_patches: int = 0
+    token_types: tuple[str, ...] = ("cls", "patches")
+
+    def __init__(self):
+        """Initialize the TeacherModel base class."""
+        super().__init__()
+
+    def _freeze(self, cfg, device):
+        """Freeze model and set teacher attributes from config dict.
+
+        Args:
+            cfg (dict): Config with 'embed_dim', 'num_patches', 'token_types' keys.
+            device (torch.device, optional): Device to move model to.
+        """
+        self.model.eval()
+        for p in self.model.parameters():
+            p.requires_grad = False
+        if device is not None:
+            self.model = self.model.to(device)
+        self.embed_dim = cfg["embed_dim"]
+        self.num_patches = cfg["num_patches"]
+        self.token_types = cfg["token_types"]
+
+    @torch.no_grad()
+    def encode(self, image: torch.Tensor) -> TeacherOutput:
+        """Encode images into CLS and patch token features.
+
+        Use torch.no_grad() instead of inference_mode so output tensors can participate in
+        autograd loss computation (e.g. smooth_l1_loss). UNIC (unic/main_unic.py:373) and
+        DUNE (dune/model/dune.py) both use torch.no_grad() for teacher forward.
+
+        Args:
+            image (torch.Tensor): Preprocessed image tensor (B, 3, H, W).
+
+        Returns:
+            (TeacherOutput): Typed output with cls and patches tensors.
+        """
+        raise NotImplementedError
+
+
+class EUPETeacher(TeacherModel):
+    """EUPE teacher for encoder distillation (https://arxiv.org/abs/2603.22387).
+
+    EUPE uses a 3-stage pipeline (Section 3): Stage 1 distills PEcore-G (1.9B) + PElang-G (1.7B) + DINOv3-H+ (840M) into
+    a 1.9B proxy; Stage 2 distills the proxy into efficient students at 256x256; Stage 3 finetunes with multi-resolution
+    {256, 384, 512}. The released models are Stage 2/3 students.
+
+    Supports ViT (vitb16, vits16) and ConvNeXt (convnextb) variants. ConvNeXt produces CLS via global average pooling
+    (verified: eupe/models/convnext.py:220, x_pool = x.mean([-2, -1])), which the EUPE paper Table 6 notes as "no cls"
+    -- we mark ConvNeXt as patches-only for loss computation.
+
+    Attributes:
+        model: The EUPE backbone (DinoVisionTransformer or ConvNeXt).
+    """
+
+    EUPE_REPO = "/home/fatih/dev/eupe"
+    CONFIGS = {
+        "vitb16": {
+            "hub_name": "eupe_vitb16",
+            "hf_repo": "facebook/EUPE-ViT-B",
+            "hf_file": "EUPE-ViT-B.pt",
+            "embed_dim": 768,
+            "num_patches": 256,  # 16x16 grid at 256x256, patch_size=16
+            "token_types": ("cls", "patches"),
+        },
+        "vits16": {
+            "hub_name": "eupe_vits16",
+            "hf_repo": "facebook/EUPE-ViT-S",
+            "hf_file": "EUPE-ViT-S.pt",
+            "embed_dim": 384,
+            "num_patches": 256,
+            "token_types": ("cls", "patches"),
+        },
+        "convnextb": {
+            "hub_name": "eupe_convnext_base",
+            "hf_repo": "facebook/EUPE-ConvNeXt-B",
+            "hf_file": "EUPE-ConvNeXt-B.pt",
+            "embed_dim": 1024,
+            "num_patches": 64,  # 8x8 grid at 256x256 with 32x downsample
+            # ConvNeXt CLS is synthetic (GAP), EUPE Table 6 notes "no cls" -- skip CLS loss
+            "token_types": ("patches",),
+        },
+    }
+
+    def __init__(self, variant: str = "vitb16", device: torch.device = None):
+        """Initialize EUPE teacher model.
+
+        Args:
+            variant (str): Model variant ('vitb16', 'vits16', or 'convnextb').
+            device (torch.device, optional): Device to load the model on.
+        """
+        super().__init__()
+        if variant not in self.CONFIGS:
+            raise ValueError(f"Unknown EUPE variant '{variant}'. Supported: {list(self.CONFIGS)}")
+        from huggingface_hub import hf_hub_download
+
+        cfg = self.CONFIGS[variant]
+        weights = hf_hub_download(cfg["hf_repo"], cfg["hf_file"])
+        self.model = torch.hub.load(self.EUPE_REPO, cfg["hub_name"], source="local", weights=weights)
+        self._freeze(cfg, device)
+
+    @torch.no_grad()
+    def encode(self, image: torch.Tensor) -> TeacherOutput:
+        """Encode images via EUPE forward_features.
+
+        Both ViT and ConvNeXt return the same dict keys (x_norm_clstoken, x_norm_patchtokens) --
+        this is EUPE's architectural polymorphism (eupe/models/convnext.py:227-229).
+
+        Args:
+            image (torch.Tensor): Preprocessed image tensor (B, 3, H, W).
+
+        Returns:
+            (TeacherOutput): CLS (None for ConvNeXt) and patch features.
+        """
+        out = self.model.forward_features(image)
+        cls = out["x_norm_clstoken"] if "cls" in self.token_types else None
+        return TeacherOutput(cls=cls, patches=out["x_norm_patchtokens"])
+
+
+class DINOv3Teacher(TeacherModel):
+    """DINOv3 teacher via HuggingFace transformers (https://arxiv.org/abs/2508.10104).
+
+    DINOv3 ViT models use 4 register tokens and RoPE positional embeddings. Output has 1 CLS + 4 register + N patch
+    tokens; we extract CLS and patches, skipping registers.
+
+    ConvNeXt variants use the same architecture as EUPE ConvNeXt (DINOv3 trains them with DINO/iBOT self-distillation).
+    ConvNeXt has no true CLS token -- marked patches-only.
+
+    Attributes:
+        model: The DINOv3 backbone from HuggingFace transformers.
+    """
+
+    CONFIGS = {
+        "vitb16": {
+            "hf_model": "facebook/dinov3-vitb16-pretrain-lvd1689m",
+            "embed_dim": 768,
+            "num_patches": 196,  # 14x14 at 224x224, patch_size=16
+            "n_registers": 4,
+            "token_types": ("cls", "patches"),
+        },
+        "vitl16": {
+            "hf_model": "facebook/dinov3-vitl16-pretrain-lvd1689m",
+            "embed_dim": 1024,
+            "num_patches": 196,
+            "n_registers": 4,
+            "token_types": ("cls", "patches"),
+        },
+        "convnextb": {
+            "hf_model": "facebook/dinov3-convnext-base-pretrain-lvd1689m",
+            "embed_dim": 1024,
+            "num_patches": 49,  # 7x7 at 224x224 with 32x downsample
+            "n_registers": 0,
+            "token_types": ("patches",),
+        },
+        "vit7b": {
+            "hf_model": "facebook/dinov3-vit7b16-pretrain-lvd1689m",
+            "embed_dim": 4096,
+            "num_patches": 196,
+            "n_registers": 4,
+            "token_types": ("cls", "patches"),
+        },
+    }
+
+    def __init__(self, variant: str = "vitl16", device: torch.device = None):
+        """Initialize DINOv3 teacher from HuggingFace.
+
+        Args:
+            variant (str): Model variant ('vitb16', 'vitl16', 'convnextb', or 'vit7b').
+            device (torch.device, optional): Device to load the model on.
+        """
+        super().__init__()
+        if variant not in self.CONFIGS:
+            raise ValueError(f"Unknown DINOv3 variant '{variant}'. Supported: {list(self.CONFIGS)}")
+        from transformers import AutoModel
+
+        cfg = self.CONFIGS[variant]
+        self.model = AutoModel.from_pretrained(cfg["hf_model"])
+        self._freeze(cfg, device)
+        self._n_registers = cfg["n_registers"]
+
+    @torch.no_grad()
+    def encode(self, image: torch.Tensor) -> TeacherOutput:
+        """Encode images via DINOv3 HuggingFace model.
+
+        ViT output has [CLS, reg0..reg3, patch0..patchN] token ordering.
+        Skip CLS + registers to get patch tokens (verified: dune/teachers/config.py
+        shows DINOv2 with num_register_tokens=4).
+
+        Args:
+            image (torch.Tensor): Preprocessed image tensor (B, 3, H, W).
+
+        Returns:
+            (TeacherOutput): CLS and patch features, skipping register tokens.
+        """
+        out = self.model(pixel_values=image)
+        hidden = out.last_hidden_state  # (B, 1 + n_reg + N_patches, D)
+        cls = hidden[:, 0] if "cls" in self.token_types else None
+        patches = hidden[:, 1 + self._n_registers :]  # skip CLS + registers
+        return TeacherOutput(cls=cls, patches=patches)
+
+
+class SigLIP2Teacher(TeacherModel):
+    """SigLIP2 teacher via HuggingFace transformers.
+
+    SigLIP2-Giant-Opt uses the SigLIP v1 architecture (model_type="siglip", not NaFlex "siglip2"). No explicit CLS token
+    in the sequence -- uses attention-pooled summary via pooler_output. Used by C-RADIOv4 as the CLIP teacher
+    (RADIOv2.5, arXiv:2412.07679, Table 1 config C onward).
+
+    Attributes:
+        model: SiglipVisionModel from HuggingFace transformers.
+    """
+
+    CONFIGS = {
+        "g": {
+            "hf_model": "google/siglip2-giant-opt-patch16-384",
+            "embed_dim": 1536,
+            "num_patches": 576,  # (384/16)^2
+            "token_types": ("cls", "patches"),
+        },
+    }
+
+    def __init__(self, variant: str = "g", device: torch.device = None):
+        """Initialize SigLIP2 teacher from HuggingFace.
+
+        Args:
+            variant (str): Model variant ('g' for Giant-Opt).
+            device (torch.device, optional): Device to load the model on.
+        """
+        super().__init__()
+        if variant not in self.CONFIGS:
+            raise ValueError(f"Unknown SigLIP2 variant '{variant}'. Supported: {list(self.CONFIGS)}")
+        from transformers import SiglipVisionModel
+
+        cfg = self.CONFIGS[variant]
+        self.model = SiglipVisionModel.from_pretrained(cfg["hf_model"])
+        self._freeze(cfg, device)
+
+    @torch.no_grad()
+    def encode(self, image: torch.Tensor) -> TeacherOutput:
+        """Encode images via SigLIP2 vision model.
+
+        SigLIP has no CLS token in the sequence. pooler_output is an attention-pooled summary
+        (SiglipMultiheadAttentionPoolingHead) that serves as the CLS equivalent.
+
+        Args:
+            image (torch.Tensor): Preprocessed image tensor (B, 3, 384, 384).
+
+        Returns:
+            (TeacherOutput): Attention-pooled CLS and patch token features.
+        """
+        out = self.model(pixel_values=image)
+        return TeacherOutput(cls=out.pooler_output, patches=out.last_hidden_state)
+
+
+class SAM3Teacher(TeacherModel):
+    """SAM3.1 ViT-L teacher using ultralytics' built-in SAM3 backbone.
+
+    SAM3 ViT (sam3/vitdet.py) uses embed_dim=1024, patch_size=14, depth=32 with RoPE and windowed
+    attention. retain_cls_token=False, so no CLS token in output -- patches only. This follows
+    AM-RADIO's convention of lambda_SAM=0 for summary loss (arXiv:2312.06709, Section 3.3) and DUNE's
+    token_types=["patch"] for non-CLS teachers (dune/teachers/config.py:25).
+
+    The backbone forward returns spatial feature maps in NCHW format. We reshape to (B, N, D) patch token format for
+    consistency with other teachers.
+
+    Attributes:
+        model: SAM3 ViT backbone (without the FPN neck or decoder).
+    """
+
+    def __init__(self, variant: str = "l", device: torch.device = None):
+        """Initialize SAM3 teacher from ultralytics built-in weights.
+
+        Args:
+            variant (str): Model variant ('l' for ViT-L).
+            device (torch.device, optional): Device to load the model on.
+        """
+        super().__init__()
+        from ultralytics.models.sam.sam3.vitdet import ViT
+        from ultralytics.utils.downloads import attempt_download_asset
+
+        # SAM3 ViT-L config from build_sam3.py:37-62
+        self.model = ViT(
+            img_size=1008,
+            pretrain_img_size=336,
+            patch_size=14,
+            embed_dim=1024,
+            depth=32,
+            num_heads=16,
+            mlp_ratio=4.625,
+            norm_layer="LayerNorm",
+            drop_path_rate=0.0,  # no drop path for frozen teacher
+            qkv_bias=True,
+            use_abs_pos=True,
+            tile_abs_pos=True,
+            global_att_blocks=(7, 15, 23, 31),
+            rel_pos_blocks=(),
+            use_rope=True,
+            use_interp_rope=True,
+            window_size=24,
+            pretrain_use_cls_token=True,
+            retain_cls_token=False,  # no CLS token in output
+            ln_pre=True,
+            ln_post=False,
+            return_interm_layers=False,
+            bias_patch_embed=False,
+        )
+        # Load pretrained weights from SAM3 checkpoint (ViT backbone is under detector.backbone.vision_backbone.trunk.*)
+        ckpt_path = attempt_download_asset("sam3.pt")
+        ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+        prefix = "detector.backbone.vision_backbone.trunk."
+        trunk_sd = {k[len(prefix) :]: v for k, v in ckpt.items() if k.startswith(prefix)}
+        self.model.load_state_dict(trunk_sd, strict=False)
+        self._freeze({"embed_dim": 1024, "num_patches": 0, "token_types": ("patches",)}, device)
+
+    @torch.no_grad()
+    def encode(self, image: torch.Tensor) -> TeacherOutput:
+        """Encode images via SAM3 ViT backbone.
+
+        SAM3 ViT forward returns list[Tensor] in NCHW format (vitdet.py:498). We take the final
+        feature map and reshape to (B, N, D) patch token format.
+
+        Args:
+            image (torch.Tensor): Preprocessed image tensor (B, 3, H, W).
+
+        Returns:
+            (TeacherOutput): Patches only (cls=None, patches in (B, N, D) format).
+        """
+        feat_maps = self.model(image)  # list of (B, C, H, W)
+        feat = feat_maps[-1]  # final feature map: (B, 1024, H', W')
+        patches = feat.flatten(2).transpose(1, 2)  # (B, N, 1024)
+        return TeacherOutput(cls=None, patches=patches)
+
+
+class TorchScriptTeacher(TeacherModel):
+    """Load a TorchScript-traced teacher model (.ts file).
+
+    Traced from _TraceWrapper which returns a (cls, patches) tuple. This removes the dependency on external repos (EUPE,
+    DINOv3, etc.) during training, following the MobileCLIP pattern in ultralytics/nn/image_model.py (MobileCLIPImageTS
+    loads .ts via torch.jit.load).
+
+    For patches-only teachers (SAM3, ConvNeXt), the .ts returns (zeros, patches) and token_types is set to ("patches",)
+    so the loss function skips the CLS component.
+
+    Attributes:
+        model (torch.jit.ScriptModule): Traced teacher model.
+    """
+
+    def __init__(
+        self, ts_path: str, embed_dim: int, num_patches: int, token_types: tuple[str, ...], device: torch.device = None
+    ):
+        """Initialize TorchScript teacher from a .ts file.
+
+        Args:
+            ts_path (str): Path to the traced .ts file.
+            embed_dim (int): Teacher embedding dimension.
+            num_patches (int): Number of patch tokens.
+            token_types (tuple[str, ...]): Which outputs are meaningful.
+            device (torch.device, optional): Device to load the model on.
+        """
+        super().__init__()
+        self.model = torch.jit.load(ts_path, map_location=device or "cpu")
+        self.model.eval()
+        self.embed_dim = embed_dim
+        self.num_patches = num_patches
+        self.token_types = token_types
+
+    @torch.no_grad()
+    def encode(self, image: torch.Tensor) -> TeacherOutput:
+        """Encode images via traced TorchScript model.
+
+        Args:
+            image (torch.Tensor): Preprocessed image tensor (B, 3, H, W).
+
+        Returns:
+            (TeacherOutput): CLS (None if patches-only) and patch features.
+        """
+        cls, patches = self.model(image)
+        return TeacherOutput(
+            cls=cls if "cls" in self.token_types else None,
+            patches=patches,
+        )
+
+
+# Teacher registry built from per-class CONFIGS to avoid duplicating embed_dim/num_patches/token_types.
+# SAM3 has no CONFIGS dict (hardcoded ViT-L config), so it's added manually.
+TEACHER_REGISTRY = {}
+for _prefix, _cls in [("eupe", EUPETeacher), ("dinov3", DINOv3Teacher), ("siglip2", SigLIP2Teacher)]:
+    for _variant, _cfg in _cls.CONFIGS.items():
+        TEACHER_REGISTRY[f"{_prefix}:{_variant}"] = {
+            "cls": _cls,
+            "embed_dim": _cfg["embed_dim"],
+            "num_patches": _cfg["num_patches"],
+            "token_types": _cfg["token_types"],
+        }
+TEACHER_REGISTRY["sam3:l"] = {"cls": SAM3Teacher, "embed_dim": 1024, "num_patches": 0, "token_types": ("patches",)}
+
+
+def build_teacher_model(variant: str, device: torch.device = None) -> TeacherModel:
+    """Build a frozen teacher model for encoder distillation.
+
+    Args:
+        variant (str): Teacher variant (e.g., "eupe:vitb16", "dinov3:vitl16", "sam3:l").
+        device (torch.device, optional): Device to load the model on.
+
+    Returns:
+        (TeacherModel): Instantiated frozen teacher model.
+    """
+    if variant not in TEACHER_REGISTRY:
+        raise ValueError(f"Unknown teacher '{variant}'. Supported: {list(TEACHER_REGISTRY)}")
+    _, size = variant.split(":")
+    return TEACHER_REGISTRY[variant]["cls"](size, device)
