@@ -289,9 +289,7 @@ class DetectionValidator(BaseValidator):
         if batch["cls"].shape[0] == 0 or preds["cls"].shape[0] == 0:
             return {"tp": np.zeros((preds["cls"].shape[0], self.niou), dtype=bool)}
         iou = box_iou(batch["bboxes"], preds["bboxes"])
-        tp = self.match_predictions(preds["cls"], batch["cls"], iou).cpu().numpy()
-        # self.image_metrics.append(self.pr_per_image(tp, batch, preds, conf_thres=0.25))
-        return {"tp": tp}
+        return {"tp": self.match_predictions(preds["cls"], batch["cls"], iou).cpu().numpy()}
 
     def pr_per_image(self, tp: np.ndarray, batch: dict, pred: dict, conf_thres: float = 0.25) -> None:
         """
