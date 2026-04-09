@@ -104,12 +104,12 @@ The `freeze` parameter accepts either an integer or a list. An integer `freeze=1
 
 The right freeze depth depends on how similar the target domain is to the pretrained data and how much training data is available:
 
-| Scenario                      | Recommendation          | Rationale                                                       |
-| ----------------------------- | ----------------------- | --------------------------------------------------------------- |
-| Large dataset, similar domain | `freeze=None` (default) | Enough data to adapt all layers without overfitting             |
-| Small dataset, similar domain | `freeze=10`             | Preserves backbone features, reduces trainable parameters       |
-| Very small dataset            | `freeze=23`             | Only the detection head trains, minimizing overfitting risk     |
-| Domain far from COCO          | `freeze=None`           | Backbone features may not transfer well and need retraining     |
+| Scenario                      | Recommendation          | Rationale                                                   |
+| ----------------------------- | ----------------------- | ----------------------------------------------------------- |
+| Large dataset, similar domain | `freeze=None` (default) | Enough data to adapt all layers without overfitting         |
+| Small dataset, similar domain | `freeze=10`             | Preserves backbone features, reduces trainable parameters   |
+| Very small dataset            | `freeze=23`             | Only the detection head trains, minimizing overfitting risk |
+| Domain far from COCO          | `freeze=None`           | Backbone features may not transfer well and need retraining |
 
 Freeze depth can also be treated as a hyperparameter - trying a few values (0, 5, 10) and comparing validation mAP is a practical way to find the best setting for a specific dataset.
 
