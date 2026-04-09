@@ -186,9 +186,9 @@ class PoseValidator(DetectionValidator):
         tp.update({"tp_p": tp_p})  # update tp with kpts IoU
         return tp
 
-    def get_stats(self) -> None:
+    def gather_stats(self) -> None:
         """Gather stats from all GPUs."""
-        super().get_stats()  # gather stats from DetectionValidator
+        super().gather_stats()  # gather stats from DetectionValidator
         if RANK == 0:
             gathered_image_metrics = [None] * dist.get_world_size()
             dist.gather_object(self.metrics.pose.image_metrics, gathered_image_metrics, dst=0)
