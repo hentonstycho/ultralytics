@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-import torch
 from pathlib import Path
+
+import torch
+
 from ultralytics.utils import LOGGER, YAML
+
 
 def torch2ethos(
     model: torch.nn.Module,
@@ -15,9 +18,7 @@ def torch2ethos(
     
     from executorch import version as executorch_version
     from executorch.backends.arm.ethosu import EthosUCompileSpec
-    from executorch.backends.arm.quantizer import (
-    EthosUQuantizer,
-    get_symmetric_quantization_config)
+    from executorch.backends.arm.quantizer import EthosUQuantizer, get_symmetric_quantization_config
     from torchao.quantization.pt2e.quantize_pt2e import convert_pt2e, prepare_pt2e
     
     LOGGER.info(f"\n{prefix} starting export with ExecuTorch {executorch_version.__version__}...")
