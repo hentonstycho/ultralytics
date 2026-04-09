@@ -154,7 +154,7 @@ This approach is particularly useful when the target domain differs significantl
 ### Validation mAP plateaus early
 
 - **Add more data**: fine-tuning benefits significantly from additional training data, especially diverse examples with varied angles, lighting, and backgrounds.
-- **Check class balance**: underrepresented classes will have low AP. Consider oversampling or collecting more examples for rare classes.
+- **Check class balance**: underrepresented classes will have low AP. Use `cls_pw` to apply inverse frequency class weighting (start with `cls_pw=0.25` for moderate imbalance, increase to `1.0` for severe imbalance).
 - **Reduce augmentation**: for very small datasets, heavy augmentation can hurt more than it helps. Try `mosaic=0.5` or `mosaic=0.0`.
 - **Increase resolution**: for datasets with small objects, try `imgsz=1280` to preserve detail.
 
