@@ -395,20 +395,21 @@ class Tuner:
         start = 0
         if self.tune_csv.exists():
             x = np.loadtxt(self.tune_csv, ndmin=2, delimiter=",", skiprows=1)
-            # check if the headers match the current space + fitness, if not then update it and add missing columns with default values
-            with open(self.tune_csv) as f:
-                headers = f.readline().strip().split(",")
-            if len(headers) != len(self.space) + 1:
-                new_data = np.zeros((x.shape[0], len(self.space) + 1))
-                keys = ["fitness"] + list(self.space.keys())
-                for i, k in enumerate(keys):
-                    if k in headers:
-                        idx = headers.index(k)
-                        new_data[:, i] = x[:, idx]
-                    else:
-                        new_data[:, i] = getattr(self.args, k)
-                x = new_data
-                np.savetxt(self.tune_csv, x, delimiter=",", header=",".join(keys), comments="")
+            # NOTE: comment this out since this is conflicting with multiple-data fitness saved in CSV
+            # # check if the headers match the current space + fitness, if not then update it and add missing columns with default values
+            # with open(self.tune_csv) as f:
+            #     headers = f.readline().strip().split(",")
+            # if len(headers) != len(self.space) + 1:
+            #     new_data = np.zeros((x.shape[0], len(self.space) + 1))
+            #     keys = ["fitness"] + list(self.space.keys())
+            #     for i, k in enumerate(keys):
+            #         if k in headers:
+            #             idx = headers.index(k)
+            #             new_data[:, i] = x[:, idx]
+            #         else:
+            #             new_data[:, i] = getattr(self.args, k)
+            #     x = new_data
+            #     np.savetxt(self.tune_csv, x, delimiter=",", header=",".join(keys), comments="")
             start = x.shape[0]
             LOGGER.info(f"{self.prefix}Resuming tuning run {self.tune_dir} from iteration {start + 1}...")
         for i in range(start, iterations):
