@@ -20,18 +20,24 @@ from ultralytics.nn.tasks import ClassificationModel
 from ultralytics.nn.teacher_model import safe_key
 
 
-def _make_adaptor(in_dim, out_dim):
+def _make_adaptor(in_dim, out_dim, hidden_dim=None):
     """Create a 2-layer MLP adaptor head per EUPE Section 4.1.
 
     Architecture: "linear projection without bias, LayerNorm, GELU, linear without bias" (EUPE arXiv:2603.22387, Section
-    4.1). EUPE uses hidden_dim=3072 for 86M+ students; we use in_dim (1280) proportionate to the 6.7M YOLO26s backbone.
-    RADIO MLP v1 uses ReLU (verified RADIO/radio/adaptor_mlp.py:27); we follow EUPE's GELU.
+    4.1). EUPE uses hidden_dim=3072 for 86M+ students; default hidden_dim=in_dim. RADIO MLP v1 uses ReLU (verified
+    RADIO/radio/adaptor_mlp.py:27); we follow EUPE's GELU.
+
+    Args:
+        in_dim (int): Input feature dimension from backbone.
+        out_dim (int): Output dimension matching teacher embed_dim.
+        hidden_dim (int, optional): MLP hidden dimension. Defaults to in_dim.
     """
+    h = hidden_dim or in_dim
     return nn.Sequential(
-        nn.Linear(in_dim, in_dim, bias=False),
-        nn.LayerNorm(in_dim),
+        nn.Linear(in_dim, h, bias=False),
+        nn.LayerNorm(h),
         nn.GELU(),
-        nn.Linear(in_dim, out_dim, bias=False),
+        nn.Linear(h, out_dim, bias=False),
     )
 
 
@@ -149,7 +155,7 @@ class ImageEncoderModel(ClassificationModel):
         teacher_grids (dict): Per-teacher spatial grid height {safe_name: int}.
     """
 
-    def __init__(self, cfg="yolo26s-cls.yaml", ch=3, nc=1000, verbose=True, teachers=None):
+    def __init__(self, cfg="yolo26s-cls.yaml", ch=3, nc=1000, verbose=True, teachers=None, proj_hidden_dim=None):
         """Initialize ImageEncoderModel with per-teacher adaptor heads.
 
         Args:
@@ -160,6 +166,8 @@ class ImageEncoderModel(ClassificationModel):
             teachers (dict): Per-teacher config. Keys are teacher names (e.g. "eupe:vitb16"), values are dicts with
                 "embed_dim", "num_patches", "token_types". If None, defaults to a single EUPE-ViT-B teacher for
                 backward compat.
+            proj_hidden_dim (int, optional): Adaptor MLP hidden dimension. None = use backbone dim (c_). EUPE uses 3072
+                for 86M+ students.
         """
         super().__init__(cfg, ch, nc, verbose)
         if teachers is None:
@@ -167,21 +175,18 @@ class ImageEncoderModel(ClassificationModel):
 
         c_ = self.model[-1].linear.in_features  # 1280
 
-        # Shared LayerNorm on concatenated [CLS; patches] before adaptor heads
-        # Matches EUPE ConvNeXt (verified eupe/models/convnext.py:224):
-        #   x_norm = self.norm(torch.cat([x_pool.unsqueeze(1), x], dim=1))
+        # Shared LayerNorm on concatenated [CLS; patches] before adaptor heads (EUPE ConvNeXt pattern)
         self.token_norm = nn.LayerNorm(c_)
 
-        # Per-teacher adaptor heads (EUPE Stage 1: one adaptor pair per teacher, Eq.4-6)
-        # AM-RADIO uses separate head_mlp + feat_mlp per teacher (verified RADIO/radio/adaptor_generic.py)
+        # Per-teacher adaptor heads (one adaptor pair per teacher, EUPE Eq.4-6)
         self.adaptors = nn.ModuleDict()
         self.teacher_grids = {}
         for name, tcfg in teachers.items():
             safe = safe_key(name)
             heads = nn.ModuleDict()
             if "cls" in tcfg["token_types"]:
-                heads["cls"] = _make_adaptor(c_, tcfg["embed_dim"])
-            heads["patch"] = _make_adaptor(c_, tcfg["embed_dim"])
+                heads["cls"] = _make_adaptor(c_, tcfg["embed_dim"], proj_hidden_dim)
+            heads["patch"] = _make_adaptor(c_, tcfg["embed_dim"], proj_hidden_dim)
             self.adaptors[safe] = heads
             self.teacher_grids[safe] = int(tcfg["num_patches"] ** 0.5) if tcfg["num_patches"] > 0 else 16
 

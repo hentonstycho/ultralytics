@@ -219,7 +219,12 @@ class ImageEncoderTrainer(ClassificationTrainer):
                 "token_types": reg["token_types"],
             }
         model = ImageEncoderModel(
-            cfg, nc=self.data["nc"], ch=self.data["channels"], verbose=verbose and RANK == -1, teachers=teachers_cfg
+            cfg,
+            nc=self.data["nc"],
+            ch=self.data["channels"],
+            verbose=verbose and RANK == -1,
+            teachers=teachers_cfg,
+            proj_hidden_dim=getattr(self.args, "proj_hidden_dim", None),
         )
         if weights:
             model.load(weights)
