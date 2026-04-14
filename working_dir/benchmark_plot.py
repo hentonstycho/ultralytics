@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 BENCHMARK = "t4"
 
 # Default metric for Y axis.
-DEFAULT_METRIC = "ap_large"
+DEFAULT_METRIC = "ap"
 METRIC_LABELS = {
     "ap": "mAP50-95 (COCO)",
     "ap50": "AP50 (COCO)",
@@ -343,10 +343,10 @@ BENCHMARKS = {
                 ("x", 18.4, {"ap": 58.3, "ap50": 76.9, "ap75": 63.3, "ap_small": 40.9, "ap_medium": 63.3, "ap_large": 74.8}),
             ],
             "DEIMv2 (Ultralytics)": [
-                ("l", 9.9, {"ap": 56.0, "ap50": 73.3, "ap75": 61.1, "ap_small": 38.0, "ap_medium": 60.8, "ap_large": 74.3}),
+                ("l", 9.9, {"ap": 56.2, "ap50": 73.5, "ap75": 61.2, "ap_small": 37.1, "ap_medium": 61.3, "ap_large": 74.9}),
             ],
             "DEIMv2 (Ultralytics, obj365)": [
-                ("l", 9.9, {"ap": 57.6, "ap50": 75.2, "ap75": 62.7, "ap_small": 40.1, "ap_medium": 62.8, "ap_large": 75.1}),
+                ("l", 9.9, {"ap": 57.8, "ap50": 75.0, "ap75": 63.1, "ap_small": 39.7, "ap_medium": 62.6, "ap_large": 75.8}),
             ],
             # "DINOv3-RTDETR": [
             #     ("s", 4.3, {"ap": 50.3, "ap50": 69.0, "ap75": 54.4, "ap_small": 27.8, "ap_medium": 55.8, "ap_large": 72.5}),
@@ -415,6 +415,22 @@ BENCHMARKS = {
                 ("x", 13.6, {"ap": 59.3, "ap50": 76.8, "ap75": 64.6, "ap_small": 42.3, "ap_medium": 64.2, "ap_large": 76.4}),
             ],
 
+        },
+    },
+    "t4_deimv2": {
+        "title": "Object Detection Models: Latency vs mAP (Tesla T4 GPU, TensorRT v10.11)",
+        "models": {
+            "RF-DETR (obj365, TopK)": [
+                ("n", 2.8, {"ap": 48.4, "ap50": 67.5, "ap75": 51.7, "ap_small": 25.3, "ap_medium": 53.6, "ap_large": 71.0}),
+                ("s", 4.1, {"ap": 53.0, "ap50": 72.0, "ap75": 57.1, "ap_small": 31.8, "ap_medium": 58.4, "ap_large": 73.1}),
+                ("m", 5.2, {"ap": 54.7, "ap50": 73.6, "ap75": 59.1, "ap_small": 35.9, "ap_medium": 59.8, "ap_large": 73.7}),
+                ("l", 8.1, {"ap": 56.5, "ap50": 75.1, "ap75": 61.2, "ap_small": 39.0, "ap_medium": 61.0, "ap_large": 74.0}),
+                ("x", 17.2, {"ap": 58.6, "ap50": 77.5, "ap75": 64.0, "ap_small": 40.8, "ap_medium": 64.3, "ap_large": 76.3}),
+                ("xxl", 27.0, {"ap": 60.1, "ap50": 78.5, "ap75": 65.8, "ap_small": 43.7, "ap_medium": 65.1, "ap_large": 76.3}),
+            ],
+            "DEIMv2 (Ultralytics, obj365)": [
+                ("l", 9.9, {"ap": 57.8, "ap50": 75.0, "ap75": 63.1, "ap_small": 39.7, "ap_medium": 62.6, "ap_large": 75.8}),
+            ],
         },
     },
 }
