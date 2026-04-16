@@ -390,8 +390,8 @@ Ultralytics provides ready-to-use solutions for common computer vision applicati
         Monitor parking lot occupancy using pre-defined zones:
 
         ```bash
-        yolo solutions parking source="path/to/video.mp4" json_file="parking_areas.json" # requires pre-built JSON
-        yolo solutions parking source="path/to/video.mp4" json_file="parking_areas.json" model="yolo26n.pt"
+        yolo solutions parking source="path/to/video.mp4" json_file="bounding_boxes.json" # requires pre-built JSON
+        yolo solutions parking source="path/to/video.mp4" json_file="bounding_boxes.json" model="yolo26n.pt"
         ```
 
     === "Help"

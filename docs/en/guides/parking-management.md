@@ -112,7 +112,7 @@ Parking management with [Ultralytics YOLO26](https://github.com/ultralytics/ultr
     === "CLI"
 
         ```bash
-        yolo solutions parking source="path/to/video.mp4" json_file="parking_areas.json" show=True
+        yolo solutions parking source="path/to/video.mp4" json_file="bounding_boxes.json" show=True
         ```
 
         !!! note

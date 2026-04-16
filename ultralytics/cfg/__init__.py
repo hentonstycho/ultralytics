@@ -121,7 +121,7 @@ SOLUTIONS_HELP_MSG = f"""
         yolo solutions security source="path/to/video.mp4" records=5
 
     9. Monitor parking occupancy (create JSON annotations first via Python ParkingPtsSelection)
-        yolo solutions parking source="path/to/video.mp4" json_file="parking_areas.json"
+        yolo solutions parking source="path/to/video.mp4" json_file="bounding_boxes.json"
 
     10. Streamlit real-time webcam inference GUI
         yolo streamlit-predict
