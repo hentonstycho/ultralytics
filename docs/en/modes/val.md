@@ -154,10 +154,10 @@ The below examples showcase YOLO model validation with custom arguments in Pytho
 
     # image_metrics is a dictionary with image filenames as keys
     print(results.box.image_metrics)
-    # Output: {'image1.jpg': {'precision': 0.85, 'recall': 0.92}, 'image2.jpg': {'precision': 0.78, 'recall': 0.88}, ...}
+    # Output: {'image1.jpg': {'precision': 0.85, 'recall': 0.92, 'tp': 17, 'fp': 3, 'fn': 1}, 'image2.jpg': {'precision': 0.78, 'recall': 0.88, 'tp': 14, 'fp': 4, 'fn': 2}, ...}
 
     # Access metrics for a specific image
-    results.box.image_metrics["image1.jpg"]  # {'precision': 0.85, 'recall': 0.92}
+    results.box.image_metrics["image1.jpg"]  # {'precision': 0.85, 'recall': 0.92, 'tp': 17, 'fp': 3, 'fn': 1}
     ```
 
     Each entry in `image_metrics` contains the following keys:
@@ -166,6 +166,9 @@ The below examples showcase YOLO model validation with custom arguments in Pytho
     |-------------|---------------------------------------------------|
     | `precision` | Precision score for the image (`tp / (tp + fp)`). |
     | `recall`    | Recall score for the image (`tp / (tp + fn)`).    |
+    | `tp`        | True positives for the image.                     |
+    | `fp`        | False positives for the image.                    |
+    | `fn`        | False negatives for the image.                    |
 
     This feature is available for detection, segmentation, pose, and OBB tasks.
 
