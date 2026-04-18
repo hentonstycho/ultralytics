@@ -20,8 +20,12 @@ from ultralytics.models import FastSAM
 # Uncomment the line below when debugging to confirm this fork is being used
 # print(f"[personal fork] ultralytics {__version__} loaded")
 
+# Personal note: FORK_VERSION tracks my customizations separately from upstream __version__
+FORK_VERSION = "8.3.0-personal.1"
+
 __all__ = (
     "__version__",
+    "FORK_VERSION",
     "ASSETS",
     "SETTINGS",
     "YOLO",
