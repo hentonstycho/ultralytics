@@ -7,12 +7,17 @@ from ultralytics.utils import ASSETS, SETTINGS
 from ultralytics.utils.checks import check_yolo as checks
 from ultralytics.utils.downloads import download
 
+# Personal fork: also expose NAS and RTDETR models at top level for convenience
+from ultralytics.models import NAS, RTDETR
+
 __all__ = (
     "__version__",
     "ASSETS",
     "SETTINGS",
     "YOLO",
     "YOLOWorld",
+    "NAS",
+    "RTDETR",
     "checks",
     "download",
 )
