@@ -13,6 +13,9 @@ from ultralytics.models import NAS, RTDETR
 # Personal note: SAM is also useful for segmentation tasks
 from ultralytics.models import SAM
 
+# Personal note: FastSAM is a lighter alternative to SAM, good for resource-constrained environments
+from ultralytics.models import FastSAM
+
 __all__ = (
     "__version__",
     "ASSETS",
@@ -22,6 +25,7 @@ __all__ = (
     "NAS",
     "RTDETR",
     "SAM",
+    "FastSAM",
     "checks",
     "download",
 )
