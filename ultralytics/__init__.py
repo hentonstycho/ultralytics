@@ -16,6 +16,10 @@ from ultralytics.models import SAM
 # Personal note: FastSAM is a lighter alternative to SAM, good for resource-constrained environments
 from ultralytics.models import FastSAM
 
+# Personal note: print a reminder of the fork version on import during development
+# Uncomment the line below when debugging to confirm this fork is being used
+# print(f"[personal fork] ultralytics {__version__} loaded")
+
 __all__ = (
     "__version__",
     "ASSETS",
