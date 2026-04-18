@@ -10,6 +10,9 @@ from ultralytics.utils.downloads import download
 # Personal fork: also expose NAS and RTDETR models at top level for convenience
 from ultralytics.models import NAS, RTDETR
 
+# Personal note: SAM is also useful for segmentation tasks
+from ultralytics.models import SAM
+
 __all__ = (
     "__version__",
     "ASSETS",
@@ -18,6 +21,7 @@ __all__ = (
     "YOLOWorld",
     "NAS",
     "RTDETR",
+    "SAM",
     "checks",
     "download",
 )
