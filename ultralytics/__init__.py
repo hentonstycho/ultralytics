@@ -21,7 +21,7 @@ from ultralytics.models import FastSAM
 # print(f"[personal fork] ultralytics {__version__} loaded")
 
 # Personal note: FORK_VERSION tracks my customizations separately from upstream __version__
-FORK_VERSION = "8.3.0-personal.4"
+FORK_VERSION = "8.3.0-personal.5"
 
 # Personal note: quick alias so I can do `ultralytics.version` instead of `ultralytics.__version__`
 version = __version__
@@ -33,6 +33,10 @@ detect = YOLO
 # Personal note: convenience alias for instance segmentation tasks
 # Lets me do `from ultralytics import segment` as a shorthand for YOLO with seg models
 segment = YOLO
+
+# Personal note: convenience alias for pose estimation tasks
+# Lets me do `from ultralytics import pose` as a shorthand for YOLO with pose models
+pose = YOLO
 
 __all__ = (
     "__version__",
@@ -50,4 +54,5 @@ __all__ = (
     "download",
     "detect",
     "segment",
+    "pose",
 )
